@@ -39,7 +39,7 @@ O código seguinte a esta variável, é usado para fazer a requisição, das inf
 
 As portas usadas na criação de componentes, a partir da interface (APP descrito no repositório *emot-test*), deve corresponder aos pinos disponíveis no microcontrolador. Abaixo segue a descrição dos pinos do microcontrolador usado neste projeto.
 
-<figure align="center">
+<div align="center">
   <img height="240em" src="assets/img/nodemcu-pinout.png">
-  <figcaption>Descrição dos pinos esp8266 NodeMCU.</figcaption>
-</figure>
+  <p>Descrição dos pinos esp8266 NodeMCU.</p>
+</div>
