@@ -19,8 +19,11 @@ String serverAddress = "SERVER_ADDRESS";
 unsigned long lagTime = 1500;
 unsigned long lastTime = 0; // Variável de controle
 
+// Components
+JSONVar components;
+
 void setup() {
-  // Inicialização da comunicação serial   
+  // Inicialização a comunicação serial   
   Serial.begin(115200);
 
   // Iniciando as configurações da conexão WiFi
@@ -28,7 +31,44 @@ void setup() {
   // O primeiro parâmetro é o SSID e o segundo é a SENHA, da sua rede WiFi
   wifiSetup("SSID", "PASSWORD");
 
-  requestGET(serverAddress, request);
+  //  Caminho para obter as informações dos componentes
+  path = serverAddress + "components.json";
+
+  do {
+    if (WiFi.status() == WL_CONNECTED) {
+      requestGET(path.c_str(), request);
+      Serial.print("For ");
+      Serial.println(path);
+      Serial.print("HTTP Response code: ");
+      Serial.println(request[0]);
+    }
+  } while (request[0] != "200");
+
+  components = JSON.parse(request[1]);
+
+  if (JSON.typeof(components) == "undefined") {
+    Serial.println("Parsing input failed!");
+  } else {
+    Serial.println("");
+    Serial.println("Setting the following components: ");
+    
+    // Inicializando os pinos
+    for (int i = 0; i < components.length(); i++) {
+      JSONVar component = components[i];
+
+      Serial.print("Component: ");
+      Serial.println(component);
+
+      int pin = component["port"];
+      String kind = component["kind"];
+
+      if (kind == "actuator") {
+        pinMode(pin, OUTPUT);
+      } else if (kind == "sensor") {
+        pinMode(pin, INPUT);
+      }
+    }
+  }
 }
 
 void loop() {
