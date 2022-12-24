@@ -22,6 +22,9 @@ unsigned long lastTime = 0; // Variável de controle
 // Components
 JSONVar components;
 
+// Variável de controle das mensagens
+bool enabledMessages = false;
+
 void setup() {
   // Inicialização a comunicação serial   
   Serial.begin(115200);
@@ -37,30 +40,44 @@ void setup() {
   do {
     if (WiFi.status() == WL_CONNECTED) {
       requestGET(path.c_str(), request);
-      Serial.print("For ");
-      Serial.println(path);
-      Serial.print("HTTP Response code: ");
-      Serial.println(request[0]);
+
+      String message;
+      message = "Request send for: " + path + "\n";
+      
+      if (request[0] == "-1") {
+        message += "Error:\n  Message: The server is offline.\n\n";
+      }
+
+      logMessage(message);
+
+      delay(lagTime);
     }
   } while (request[0] != "200");
 
   components = JSON.parse(request[1]);
 
+  String message = "Response:\n  Code: " + request[0] + "\n" + "  Body: " + request[1] + "\n\n";
+  logMessage(message);
+
   if (JSON.typeof(components) == "undefined") {
-    Serial.println("Parsing input failed!");
+    logMessage("Error:\n  Message: Error creating JSON object.\n\n");
   } else {
-    Serial.println("");
-    Serial.println("Setting the following components: ");
+    logMessage("Setting the following components:\n");
     
     // Inicializando os pinos
     for (int i = 0; i < components.length(); i++) {
       JSONVar component = components[i];
 
-      Serial.print("Component: ");
-      Serial.println(component);
-
+      String componentName = component["name"];
       int pin = component["port"];
       String kind = component["kind"];
+
+      String message;
+      message = "Component:\n";
+      message += "  Name: " + componentName + "\n";
+      message += "  Port: " + String(pin) + "\n";
+      message += "  Kind: " + kind + "\n\n";
+      logMessage(message);
 
       if (kind == "actuator") {
         pinMode(pin, OUTPUT);
@@ -80,20 +97,28 @@ void loop() {
       if (WiFi.status() == WL_CONNECTED) {
         // Caminho para verificar as saídas dos componentes
         path = serverAddress + "outputs.json";
-        Serial.print("For ");
-        Serial.println(path);
-        Serial.print("HTTP Response code: ");
-        Serial.println(request[0]);
 
         requestGET(path.c_str(), request);
+        
+        String message;
+        message = "Request send for: " + path + "\n";
+
+        if (request[0] == "-1") {
+          message += "Error:\n  Message: The server is offline.\n";
+        }
+        
+        message += "Response:\n  Code: " + request[0] + "\n" + "  Body: " + request[1] + "\n\n";
+        logMessage(message);
     
         JSONVar outputs = JSON.parse(request[1]);
     
         if (JSON.typeof(outputs) == "undefined") {
-          Serial.println("Parsing input failed!");
+          logMessage("Error:\n  Message: Error creating JSON object.\n\n");
         } else {
           // Se existirem saídas
           if (outputs.length()) {
+            logMessage("Sending the following outputs:\n");
+            
             // Aplicando as saídas
             for (int i = 0; i < outputs.length(); i++) {
               JSONVar output = outputs[i];
@@ -102,23 +127,43 @@ void loop() {
               int pin = component["port"];
               int outputValue = output["value"];
               String outputKind = output["kind"];
+
+              String message = "Output:\n";
+              message += "  Component: " + String(component["name"]) + "\n";
+              message += "  Port: " + String(pin) + "\n";
+              message += "  Kind: " + outputKind + "\n";
        
               if (outputKind == "digital") {
                 if (outputValue == 255) {
                   digitalWrite(pin, HIGH);
+                  message += "  Value: HIGH\n\n";
                 } else {
                   digitalWrite(pin, LOW);
+                  message += "  Value: LOW\n\n";
                 }
               } else if (outputKind == "analog") {
                 analogWrite(pin, outputValue);
+                message += "  Value: " + String(outputValue) + "\n\n";
               }
+
+              logMessage(message);
             }
+          } else {
+            logMessage("No output records.\n\n");
           }
         }
+      } else {
+        logMessage("Error:\n  Message: WiFi has been disconnected");
       }
     }
 
     lastTime = millis();
+  }
+}
+
+void logMessage(String message) {
+  if (enabledMessages) {
+    Serial.print(message);
   }
 }
 
@@ -156,14 +201,13 @@ void requestGET(const char* path, String request[]) {
 
 void wifiSetup(char* ssid, char* password) {
   WiFi.begin(ssid, password);
-  Serial.println("Connecting");
+  logMessage("\nConnecting to WiFi...\n");
 
   while(WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
+    logMessage("Waiting...\n");
     delay(500);
   }
 
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
+  logMessage("\nConnected to WiFi network with IP Address: ");
+  logMessage(WiFi.localIP().toString() + ".\n\n");
 }
