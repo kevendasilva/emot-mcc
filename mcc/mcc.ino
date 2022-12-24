@@ -72,6 +72,67 @@ void setup() {
 }
 
 void loop() {
+  // Verificando o tempo entre as requisições
+  if ((millis() - lastTime) > lagTime) {
+    // Caso existam componentes
+    if (components.length()) {
+      // Se ainda estiver conectado a rede WiFi
+      if (WiFi.status() == WL_CONNECTED) {
+        // Caminho para verificar as saídas dos componentes
+        path = serverAddress + "outputs.json";
+        Serial.print("For ");
+        Serial.println(path);
+        Serial.print("HTTP Response code: ");
+        Serial.println(request[0]);
+
+        requestGET(path.c_str(), request);
+    
+        JSONVar outputs = JSON.parse(request[1]);
+    
+        if (JSON.typeof(outputs) == "undefined") {
+          Serial.println("Parsing input failed!");
+        } else {
+          // Se existirem saídas
+          if (outputs.length()) {
+            // Aplicando as saídas
+            for (int i = 0; i < outputs.length(); i++) {
+              JSONVar output = outputs[i];
+              JSONVar component = searchComponentByID(output["component_id"]);
+
+              int pin = component["port"];
+              int outputValue = output["value"];
+              String outputKind = output["kind"];
+       
+              if (outputKind == "digital") {
+                if (outputValue == 255) {
+                  digitalWrite(pin, HIGH);
+                } else {
+                  digitalWrite(pin, LOW);
+                }
+              } else if (outputKind == "analog") {
+                analogWrite(pin, outputValue);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    lastTime = millis();
+  }
+}
+
+JSONVar searchComponentByID(int id) {
+  JSONVar component;
+  
+  for (int i = 0; i < components.length(); i++) {
+    component = components[i];
+    int componentId = component["id"];
+
+    if (componentId == id) {
+      return component;
+    }
+  }
 }
 
 void requestGET(const char* path, String request[]) {
