@@ -9,6 +9,9 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 
+// Classes personalizadas
+#include "src/LogMessageHandler/LogMessageHandler.h"
+
 // Variáveis usadas nas requisições HTTP
 String path;
 String request[2];
@@ -23,7 +26,11 @@ unsigned long lastTime = 0; // Variável de controle
 JSONVar components;
 
 // Variável de controle das mensagens
-bool enabledMessages = false;
+bool messagesAreEnabled = false;
+
+// Manipulador das mensagens de log
+LogMessageHandler lmh;
+
 
 void setup() {
   // Inicialização a comunicação serial   
@@ -41,23 +48,15 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
       requestGET(path.c_str(), request);
 
-      String message;
-      message = "Request send for: " + path + "\n";
-      
-      if (request[0] == "-1") {
-        message += "Error:\n  Message: The server is offline.\n\n";
-      }
-
-      logMessage(message);
+      String data[3];
+      data[0] = path; data[1] = request[0]; data[2] = request[1];
+      logMessage(lmh.handleMessage("request", data));
 
       delay(lagTime);
     }
   } while (request[0] != "200");
 
   components = JSON.parse(request[1]);
-
-  String message = "Response:\n  Code: " + request[0] + "\n" + "  Body: " + request[1] + "\n\n";
-  logMessage(message);
 
   if (JSON.typeof(components) == "undefined") {
     logMessage("Error:\n  Message: Error creating JSON object.\n\n");
@@ -71,13 +70,10 @@ void setup() {
       String componentName = component["name"];
       int pin = component["port"];
       String kind = component["kind"];
-
-      String message;
-      message = "Component:\n";
-      message += "  Name: " + componentName + "\n";
-      message += "  Port: " + String(pin) + "\n";
-      message += "  Kind: " + kind + "\n\n";
-      logMessage(message);
+    
+      String data[3];
+      data[0] = componentName; data[1] = String(pin); data[2] = kind;
+      logMessage(lmh.handleMessage("component", data));
 
       if (kind == "actuator") {
         pinMode(pin, OUTPUT);
@@ -99,16 +95,10 @@ void loop() {
         path = serverAddress + "outputs.json";
 
         requestGET(path.c_str(), request);
-        
-        String message;
-        message = "Request send for: " + path + "\n";
 
-        if (request[0] == "-1") {
-          message += "Error:\n  Message: The server is offline.\n";
-        }
-        
-        message += "Response:\n  Code: " + request[0] + "\n" + "  Body: " + request[1] + "\n\n";
-        logMessage(message);
+        String data[3];
+        data[0] = path; data[1] = request[0]; data[2] = request[1];
+        logMessage(lmh.handleMessage("request", data));
     
         JSONVar outputs = JSON.parse(request[1]);
     
@@ -128,25 +118,21 @@ void loop() {
               int outputValue = output["value"];
               String outputKind = output["kind"];
 
-              String message = "Output:\n";
-              message += "  Component: " + String(component["name"]) + "\n";
-              message += "  Port: " + String(pin) + "\n";
-              message += "  Kind: " + outputKind + "\n";
+
+              String data[4];
+              data[0] = String(component["name"]); data[1] = String(pin); data[2] = outputKind; data[3] = String(outputValue);
+              logMessage(lmh.handleMessage("output", data));
        
               if (outputKind == "digital") {
                 if (outputValue == 255) {
                   digitalWrite(pin, HIGH);
-                  message += "  Value: HIGH\n\n";
                 } else {
                   digitalWrite(pin, LOW);
-                  message += "  Value: LOW\n\n";
                 }
               } else if (outputKind == "analog") {
                 analogWrite(pin, outputValue);
-                message += "  Value: " + String(outputValue) + "\n\n";
               }
 
-              logMessage(message);
             }
           } else {
             logMessage("No output records.\n\n");
@@ -162,7 +148,7 @@ void loop() {
 }
 
 void logMessage(String message) {
-  if (enabledMessages) {
+  if (messagesAreEnabled) {
     Serial.print(message);
   }
 }
