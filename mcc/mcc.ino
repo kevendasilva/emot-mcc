@@ -1,4 +1,4 @@
-/*
+ /*
  * Projeto emot
  * Desenvolvido por: Keven da Silva
  */
@@ -8,9 +8,11 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
+#include <vector>
 
 // Classes personalizadas
 #include "src/LogMessageHandler/LogMessageHandler.h"
+#include "src/Component/Actuator/Actuator.h"
 
 // Variáveis usadas nas requisições HTTP
 String path;
@@ -22,15 +24,14 @@ String serverAddress = "SERVER_ADDRESS";
 unsigned long lagTime = 1500;
 unsigned long lastTime = 0; // Variável de controle
 
-// Components
-JSONVar components;
-
 // Variável de controle das mensagens
 bool messagesAreEnabled = false;
 
 // Manipulador das mensagens de log
 LogMessageHandler lmh;
 
+// Teste com a classe Componente
+std::vector<Component*> components;
 
 void setup() {
   // Inicialização a comunicação serial   
@@ -48,38 +49,30 @@ void setup() {
     if (WiFi.status() == WL_CONNECTED) {
       requestGET(path.c_str(), request);
 
-      String data[3];
-      data[0] = path; data[1] = request[0]; data[2] = request[1];
+      String data[3] = {path, request[0], request[1]};
       logMessage(lmh.handleMessage("request", data));
 
-      delay(lagTime);
+      delay(500);
     }
   } while (request[0] != "200");
 
-  components = JSON.parse(request[1]);
+  JSONVar response = JSON.parse(request[1]);
 
-  if (JSON.typeof(components) == "undefined") {
+  if (JSON.typeof(response) == "undefined") {
     logMessage("Error:\n  Message: Error creating JSON object.\n\n");
   } else {
     logMessage("Setting the following components:\n");
     
-    // Inicializando os pinos
-    for (int i = 0; i < components.length(); i++) {
-      JSONVar component = components[i];
+    // Inicializando os componentes
+    for (int i = 0; i < response.length(); i++) {
+      JSONVar component = response[i];
 
-      String componentName = component["name"];
-      int pin = component["port"];
-      String kind = component["kind"];
-    
-      String data[3];
-      data[0] = componentName; data[1] = String(pin); data[2] = kind;
-      logMessage(lmh.handleMessage("component", data));
-
-      if (kind == "actuator") {
-        pinMode(pin, OUTPUT);
-      } else if (kind == "sensor") {
-        pinMode(pin, INPUT);
+      if (String(component["kind"]) == "actuator") {
+        components.push_back(new Actuator(component["id"], component["name"], component["port"], component["max_value"], component["min_value"]));
       }
+
+      String data[3] = {String(component["name"]), String(component["port"]), String(component["kind"])};
+      logMessage(lmh.handleMessage("component", data));
     }
   }
 }
@@ -88,7 +81,7 @@ void loop() {
   // Verificando o tempo entre as requisições
   if ((millis() - lastTime) > lagTime) {
     // Caso existam componentes
-    if (components.length()) {
+    if (components.size()) {
       // Se ainda estiver conectado a rede WiFi
       if (WiFi.status() == WL_CONNECTED) {
         // Caminho para verificar as saídas dos componentes
@@ -96,8 +89,7 @@ void loop() {
 
         requestGET(path.c_str(), request);
 
-        String data[3];
-        data[0] = path; data[1] = request[0]; data[2] = request[1];
+        String data[3] = {path, request[0], request[1]};
         logMessage(lmh.handleMessage("request", data));
     
         JSONVar outputs = JSON.parse(request[1]);
@@ -112,27 +104,15 @@ void loop() {
             // Aplicando as saídas
             for (int i = 0; i < outputs.length(); i++) {
               JSONVar output = outputs[i];
-              JSONVar component = searchComponentByID(output["component_id"]);
+              int index = searchComponentByID(output["component_id"]);
+              Actuator *actuator = static_cast<Actuator*>(components[index]);
+            
+              int outputStatus = actuator->output(output["value"], output["kind"]);
 
-              int pin = component["port"];
-              int outputValue = output["value"];
-              String outputKind = output["kind"];
-
-
-              String data[4];
-              data[0] = String(component["name"]); data[1] = String(pin); data[2] = outputKind; data[3] = String(outputValue);
-              logMessage(lmh.handleMessage("output", data));
-       
-              if (outputKind == "digital") {
-                if (outputValue == 255) {
-                  digitalWrite(pin, HIGH);
-                } else {
-                  digitalWrite(pin, LOW);
-                }
-              } else if (outputKind == "analog") {
-                analogWrite(pin, outputValue);
+              if (outputStatus) {
+                String data[4] = {actuator->getName(), String(actuator->getPin()), String(output["kind"]), String(output["value"])};
+                logMessage(lmh.handleMessage("output", data));
               }
-
             }
           } else {
             logMessage("No output records.\n\n");
@@ -153,15 +133,10 @@ void logMessage(String message) {
   }
 }
 
-JSONVar searchComponentByID(int id) {
-  JSONVar component;
-  
-  for (int i = 0; i < components.length(); i++) {
-    component = components[i];
-    int componentId = component["id"];
-
-    if (componentId == id) {
-      return component;
+int searchComponentByID(int id) {  
+  for (int i = 0; i < components.size(); i++) {
+    if (components[i]->getComponentId() == id) {
+      return i;
     }
   }
 }
