@@ -5,20 +5,18 @@
 
 // Bibliotecas
 #include <Arduino_JSON.h>
-#include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>
 #include <vector>
 
 // Classes personalizadas
 #include "src/LogMessageHandler/LogMessageHandler.h"
 #include "src/Component/Actuator/Actuator.h"
+#include "src/HttpRequest/HttpRequest.h"
 
-// Variáveis usadas nas requisições HTTP
-String path;
-String request[2];
 // Endereço do servidor
-String serverAddress = "SERVER_ADDRESS";
+const String SERVER_ADDRESS = "SERVER_ADDRESS";
+
+HttpRequest request;
 
 // Delay entre requisições - Todos os tempos estão em milissegundos
 unsigned long lagTime = 1500;
@@ -43,20 +41,23 @@ void setup() {
   wifiSetup("SSID", "PASSWORD");
 
   //  Caminho para obter as informações dos componentes
-  path = serverAddress + "components.json";
+  String url = SERVER_ADDRESS + "/components.json";
+  String body;
 
   do {
     if (WiFi.status() == WL_CONNECTED) {
-      requestGET(path.c_str(), request);
+      request.get(url);
+      body = request.getResponse();
+      int responseStatusCode = request.getResponseStatusCode();
 
-      String data[3] = {path, request[0], request[1]};
+      String data[3] = {url, String(responseStatusCode), body};
       logMessage(lmh.handleMessage("request", data));
 
       delay(500);
     }
-  } while (request[0] != "200");
+  } while (responseStatusCode != 200);
 
-  JSONVar response = JSON.parse(request[1]);
+  JSONVar response = JSON.parse(body);
 
   if (JSON.typeof(response) == "undefined") {
     logMessage("Error:\n  Message: Error creating JSON object.\n\n");
@@ -85,14 +86,16 @@ void loop() {
       // Se ainda estiver conectado a rede WiFi
       if (WiFi.status() == WL_CONNECTED) {
         // Caminho para verificar as saídas dos componentes
-        path = serverAddress + "outputs.json";
+        String url = SERVER_ADDRESS + "/outputs.json";
+        String body;
+        
+        request.get(url);
+        body = request.getResponse();
 
-        requestGET(path.c_str(), request);
-
-        String data[3] = {path, request[0], request[1]};
+        String data[3] = {url, String(request.getResponseStatusCode()), body};
         logMessage(lmh.handleMessage("request", data));
     
-        JSONVar outputs = JSON.parse(request[1]);
+        JSONVar outputs = JSON.parse(body);
     
         if (JSON.typeof(outputs) == "undefined") {
           logMessage("Error:\n  Message: Error creating JSON object.\n\n");
@@ -139,25 +142,6 @@ int searchComponentByID(int id) {
       return i;
     }
   }
-}
-
-void requestGET(const char* path, String request[]) {
-  WiFiClient client;
-  HTTPClient http;
-
-  http.begin(client, path);
-
-  int responseCode = http.GET();
-  String response = "[]"; 
-  request[0] = String(responseCode);
-  request[1] = response;
-  
-  if (responseCode > 0) {
-    response = http.getString();
-    request[1] = response;
-  }
-
-  http.end();
 }
 
 void wifiSetup(char* ssid, char* password) {
