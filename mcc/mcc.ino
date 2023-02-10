@@ -12,6 +12,10 @@
 #include "src/Component/Actuator/Actuator.h"
 #include "src/HttpRequest/HttpRequest.h"
 
+// LEDs de notificação
+#define RESPONSE_STATUS_LED D0
+#define WIFI_STATUS_LED D1
+
 // Endereço do servidor
 const String SERVER_ADDRESS = "SERVER_ADDRESS";
 
@@ -25,8 +29,9 @@ unsigned long lastTime = 0; // Variável de controle
 std::vector<Component*> components;
 
 void setup() {
-  // Inicialização a comunicação serial   
-  Serial.begin(115200);
+  // Inicializando LEDs de notificação
+  pinMode(RESPONSE_STATUS_LED, OUTPUT);
+  pinMode(WIFI_STATUS_LED, OUTPUT);
 
   // Iniciando as configurações da conexão WiFi
   // Informações para conexão WiFi
@@ -48,11 +53,15 @@ void setup() {
     }
   } while (responseStatusCode != 200);
 
+  digitalWrite(WIFI_STATUS_LED, HIGH);
+
   JSONVar response = JSON.parse(body);
 
   if (JSON.typeof(response) == "undefined") {
-    Serial.println("Error:\n  Message: Error creating JSON object.\n\n");
+    digitalWrite(RESPONSE_STATUS_LED, LOW);
   } else {
+    digitalWrite(RESPONSE_STATUS_LED, HIGH);
+    
     // Inicializando os componentes
     for (int i = 0; i < response.length(); i++) {
       JSONVar component = response[i];
@@ -71,6 +80,8 @@ void loop() {
     if (components.size()) {
       // Se ainda estiver conectado a rede WiFi
       if (WiFi.status() == WL_CONNECTED) {
+        digitalWrite(WIFI_STATUS_LED, HIGH);
+
         // Caminho para verificar as saídas dos componentes
         String url = SERVER_ADDRESS + "/outputs.json";
         String body;
@@ -81,8 +92,9 @@ void loop() {
         JSONVar outputs = JSON.parse(body);
     
         if (JSON.typeof(outputs) == "undefined") {
-          Serial.println("Error creating JSON object.");
+          digitalWrite(RESPONSE_STATUS_LED, LOW);
         } else {
+          digitalWrite(RESPONSE_STATUS_LED, HIGH);
           // Se existirem saídas
           if (outputs.length()) {
             // Aplicando as saídas
@@ -93,12 +105,12 @@ void loop() {
             
               int outputStatus = actuator->output(output["value"], output["kind"]);
             }
-          } else {
-            Serial.println("No output records.\n\n");
           }
         }
       } else {
-        Serial.println("WiFi has been disconnected");
+        digitalWrite(WIFI_STATUS_LED, HIGH);
+        delay(500);
+        digitalWrite(WIFI_STATUS_LED, LOW);
       }
     }
 
@@ -116,13 +128,8 @@ int searchComponentByID(int id) {
 
 void wifiSetup(char* ssid, char* password) {
   WiFi.begin(ssid, password);
-  Serial.println("Connecting to WiFi...");
 
   while(WiFi.status() != WL_CONNECTED) {
-    Serial.println("Waiting...");
-    delay(500);
+    delay(1000);
   }
-
-  Serial.println("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP().toString());
 }
