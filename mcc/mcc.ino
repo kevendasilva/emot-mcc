@@ -14,6 +14,7 @@
 #include <ESP8266WiFi.h>
 #include <vector>
 #include "src/Component/Actuator/Actuator.h"
+#include "src/Component/Sensor/Sensor.h"
 #include "src/HttpRequest/HttpRequest.h"
 
 #define RESPONSE_STATUS_LED D0
@@ -64,6 +65,10 @@ void setup() {
       if (String(component["kind"]) == "actuator") {
         components.push_back(new Actuator(component["id"], component["name"], component["port"], component["max_value"], component["min_value"]));
       }
+
+      if (String(component["kind"]) == "sensor") {
+        components.push_back(new Sensor(component["id"], component["name"], component["port"]));
+      }
     }
   }
 }
@@ -94,7 +99,7 @@ void loop() {
               JSONVar output = outputs[i];
               int index = searchComponentByID(output["component_id"]);
               Actuator *actuator = static_cast<Actuator*>(components[index]);
-            
+
               int outputStatus = actuator->output(output["value"], output["kind"]);
             }
           }
