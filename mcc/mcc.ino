@@ -36,12 +36,13 @@ void setup() {
   //  Caminho para obter as informações dos componentes
   String url = SERVER_ADDRESS + "/components.json";
   String body;
+  int responseStatusCode;
 
   do {
     if (WiFi.status() == WL_CONNECTED) {
       request.get(url);
       body = request.getResponse();
-      int responseStatusCode = request.getResponseStatusCode();
+      responseStatusCode = request.getResponseStatusCode();
 
       delay(500);
     }
