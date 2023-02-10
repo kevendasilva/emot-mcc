@@ -1,44 +1,39 @@
  /*
- * Projeto emot
- * Desenvolvido por: Keven da Silva
+  The Amazing Flower Monitor (emot)
+
+  Sistema de monitoramento de flores e plantas. Por meio de uma interface web,
+  é possível controlar valores de saída, para atuadores conectados a placa. E,
+  ler valores, para o caso de sensores. O propósito deste código é ser usado 
+  no sistema de monitoramento, mas nada impede que o mesmo seja usado para
+  outros projetos de internet das coisas.
+
+  Projeto emot - Desenvolvido por Keven da Silva.
  */
 
-// Bibliotecas
 #include <Arduino_JSON.h>
 #include <ESP8266WiFi.h>
 #include <vector>
-
-// Classes personalizadas
 #include "src/Component/Actuator/Actuator.h"
 #include "src/HttpRequest/HttpRequest.h"
 
-// LEDs de notificação
 #define RESPONSE_STATUS_LED D0
 #define WIFI_STATUS_LED D1
 
-// Endereço do servidor
 const String SERVER_ADDRESS = "SERVER_ADDRESS";
-
 HttpRequest request;
 
-// Delay entre requisições - Todos os tempos estão em milissegundos
 unsigned long lagTime = 1500;
-unsigned long lastTime = 0; // Variável de controle
+unsigned long lastTime = 0;
 
-// Teste com a classe Componente
 std::vector<Component*> components;
 
 void setup() {
-  // Inicializando LEDs de notificação
   pinMode(RESPONSE_STATUS_LED, OUTPUT);
   pinMode(WIFI_STATUS_LED, OUTPUT);
 
-  // Iniciando as configurações da conexão WiFi
-  // Informações para conexão WiFi
-  // O primeiro parâmetro é o SSID e o segundo é a SENHA, da sua rede WiFi
   wifiSetup("SSID", "PASSWORD");
 
-  //  Caminho para obter as informações dos componentes
+  // Solicitando informações sobre os componentes 
   String url = SERVER_ADDRESS + "/components.json";
   String body;
   int responseStatusCode;
@@ -62,7 +57,7 @@ void setup() {
   } else {
     digitalWrite(RESPONSE_STATUS_LED, HIGH);
     
-    // Inicializando os componentes
+    // Configurando os componentes
     for (int i = 0; i < response.length(); i++) {
       JSONVar component = response[i];
 
@@ -74,15 +69,12 @@ void setup() {
 }
 
 void loop() {
-  // Verificando o tempo entre as requisições
   if ((millis() - lastTime) > lagTime) {
-    // Caso existam componentes
     if (components.size()) {
-      // Se ainda estiver conectado a rede WiFi
       if (WiFi.status() == WL_CONNECTED) {
         digitalWrite(WIFI_STATUS_LED, HIGH);
 
-        // Caminho para verificar as saídas dos componentes
+        // Solicitando informações de saídas desejadas, para os atuadores
         String url = SERVER_ADDRESS + "/outputs.json";
         String body;
         
@@ -95,9 +87,9 @@ void loop() {
           digitalWrite(RESPONSE_STATUS_LED, LOW);
         } else {
           digitalWrite(RESPONSE_STATUS_LED, HIGH);
-          // Se existirem saídas
+
           if (outputs.length()) {
-            // Aplicando as saídas
+            // Aplicando as saídas desejadas
             for (int i = 0; i < outputs.length(); i++) {
               JSONVar output = outputs[i];
               int index = searchComponentByID(output["component_id"]);
