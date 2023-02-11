@@ -17,6 +17,8 @@
 #include "src/Component/Sensor/Sensor.h"
 #include "src/HttpRequest/HttpRequest.h"
 
+using namespace std;
+
 #define RESPONSE_STATUS_LED D0
 #define WIFI_STATUS_LED D1
 
@@ -26,7 +28,8 @@ HttpRequest request;
 unsigned long lagTime = 1500;
 unsigned long lastTime = 0;
 
-std::vector<Component*> components;
+vector<Actuator*> actuators;
+vector<Sensor*> sensores;
 
 void setup() {
   pinMode(RESPONSE_STATUS_LED, OUTPUT);
@@ -40,7 +43,7 @@ void setup() {
   int responseStatusCode;
 
   do {
-    if (WiFi.status() == WL_CONNECTED) {
+    if (wifiIsConnected()) {
       request.get(url);
       body = request.getResponse();
       responseStatusCode = request.getResponseStatusCode();
@@ -63,11 +66,11 @@ void setup() {
       JSONVar component = response[i];
 
       if (String(component["kind"]) == "actuator") {
-        components.push_back(new Actuator(component["id"], component["name"], component["port"], component["max_value"], component["min_value"]));
+        actuators.push_back(new Actuator(component["id"], component["name"], component["port"], component["max_value"], component["min_value"]));
       }
 
       if (String(component["kind"]) == "sensor") {
-        components.push_back(new Sensor(component["id"], component["name"], component["port"]));
+        sensores.push_back(new Sensor(component["id"], component["name"], component["port"]));
       }
     }
   }
@@ -75,58 +78,72 @@ void setup() {
 
 void loop() {
   if ((millis() - lastTime) > lagTime) {
-    if (components.size()) {
-      if (WiFi.status() == WL_CONNECTED) {
-        digitalWrite(WIFI_STATUS_LED, HIGH);
+    if (wifiIsConnected()) {
+      digitalWrite(WIFI_STATUS_LED, HIGH);
 
-        // Solicitando informações de saídas desejadas, para os atuadores
-        String url = SERVER_ADDRESS + "/outputs.json";
-        String body;
-        
-        request.get(url);
-        body = request.getResponse();
+      // Solicitando informações de saídas desejadas, para os atuadores
+      String url = SERVER_ADDRESS + "/outputs.json";
+      String body;
+      
+      request.get(url);
+      body = request.getResponse();
 
-        JSONVar outputs = JSON.parse(body);
-    
-        if (JSON.typeof(outputs) == "undefined") {
-          digitalWrite(RESPONSE_STATUS_LED, LOW);
-        } else {
-          digitalWrite(RESPONSE_STATUS_LED, HIGH);
+      JSONVar outputs = JSON.parse(body);
+  
+      if (JSON.typeof(outputs) == "undefined") {
+        digitalWrite(RESPONSE_STATUS_LED, LOW);
+      } else {
+        digitalWrite(RESPONSE_STATUS_LED, HIGH);
 
-          if (outputs.length()) {
-            // Aplicando as saídas desejadas
-            for (int i = 0; i < outputs.length(); i++) {
-              JSONVar output = outputs[i];
-              int index = searchComponentByID(output["component_id"]);
-              Actuator *actuator = static_cast<Actuator*>(components[index]);
+        // Aplicando as saídas desejadas
+        for (int i = 0; i < outputs.length(); i++) {
+          JSONVar output = outputs[i];
+          int index = searchActuatorById(output["component_id"]);
 
-              int outputStatus = actuator->output(output["value"], output["kind"]);
-            }
+          if (index != -1) {
+            int outputStatus = actuators[index]->output(output["value"], output["kind"]);
           }
         }
-      } else {
-        digitalWrite(WIFI_STATUS_LED, HIGH);
-        delay(500);
-        digitalWrite(WIFI_STATUS_LED, LOW);
       }
+
+      // Sensores   
+      for (int i = 0; i < sensores.size(); i++) {
+        String value = String(sensores[i]->read());
+        String componentId = String(sensores[i]->getComponentId());
+
+        String url = SERVER_ADDRESS + "/readings.json";
+        String payload = "reading[component_id]=" + componentId + "&" + "reading[value]=" + value;
+
+        request.post(url, payload);
+      }
+    } else {
+      digitalWrite(WIFI_STATUS_LED, HIGH);
+      delay(500);
+      digitalWrite(WIFI_STATUS_LED, LOW);
     }
 
     lastTime = millis();
   }
 }
 
-int searchComponentByID(int id) {  
-  for (int i = 0; i < components.size(); i++) {
-    if (components[i]->getComponentId() == id) {
+int searchActuatorById(int id) {  
+  for (int i = 0; i < actuators.size(); i++) {
+    if (actuators[i]->getComponentId() == id) {
       return i;
     }
   }
+
+  return -1;
+}
+
+bool wifiIsConnected() {
+  return WiFi.status() == WL_CONNECTED;
 }
 
 void wifiSetup(char* ssid, char* password) {
   WiFi.begin(ssid, password);
 
-  while(WiFi.status() != WL_CONNECTED) {
+  while(!wifiIsConnected()) {
     delay(1000);
   }
 }
